@@ -17,8 +17,13 @@ def build_html(path: Path, target: Path = None, /, **kwargs):
         f.write(html)
 
 
+def link_file(path):
+    if path[0] == 'common':
+        return 'common.lark', f'./common.html#{path[-1]}'
+
+
 common_path = Path(lark.__file__).parent / 'grammars' / 'common.lark'
 
 build_html(common_path, Path('common.html'), regex_link_creator=regex101)
-build_html(Path('lark.lark'), regex_link_creator=regex101)
+build_html(Path('lark.lark'), regex_link_creator=regex101, get_import=link_file)
 build_html(Path('test.lark'), regex_link_creator=regex101)

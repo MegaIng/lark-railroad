@@ -169,21 +169,42 @@ DIAGRAM_TEMPLATE = """
 class Lark2HTML(Lark2Railroad):
     file_name = '&lt;string&gt;'
 
-    def __init__(self, css=DEFAULT_STYLE, file_name=None, regex_link_creator=lambda regex, flags: None):
+    def __init__(self, css=DEFAULT_STYLE, file_name=None, regex_link_creator=lambda regex, flags: None,
+                 get_import=lambda path: None):
         super(Lark2HTML, self).__init__(css=None)
         self._global_css = css
         if file_name is not None:
             self.file_name = file_name
-        self.regex_link_creator = regex_link_creator
+        self._regex_link_creator = regex_link_creator
+        self._get_import = get_import
 
     def _href_generator(self, node_type, value):
         if node_type in ('RULE', 'TOKEN'):
             return f'#{value}'
         elif node_type == 'REGEXP':
             regex, flags = _unquote_literal(node_type, value)
-            return self.regex_link_creator(regex, flags)
+            return self._regex_link_creator(regex, flags)
         else:
             return None
+
+    def import_path(self, children):
+        return children
+
+    def import_(self, children):
+        if len(children) == 2:
+            path, alias = children
+        else:
+            path, = children
+            alias = path[-1]
+        info = self._get_import(path)
+        if info is None:
+            raise Discard
+        file_name, href = info
+        t, c = {'TOKEN': ('simple', Terminal), 'RULE': ('complex', NonTerminal)}[alias.type]
+        return alias.value, Diagram(Start(t, alias.value),
+                                    c(f"import {path[-1].value} from {''.join(path[:-2])}[{file_name!r}]",
+                                             href=href),
+                                    type=t, css=self._css)
 
     def start(self, children):
         diagrams = []

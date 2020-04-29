@@ -13,9 +13,9 @@ token_params: ["{" TOKEN ("," TOKEN)* "}"]
 priority: "." NUMBER
 
 statement: "%ignore" expansions _NL                -> ignore
-         | "%import" import_path ["->" _name] _NL   -> import_
+         | "%import" import_path ["->" _name] _NL  -> import_
          | "%import" import_path name_list _NL     -> multi_import
-         | "%declare" _name+                        -> declare
+         | "%declare" _name+                       -> declare
 
 !import_path: "."? _name ("." _name)*
 name_list: "(" _name ("," _name)* ")"
