@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import sys
-
-from railroad import Diagram
-
-from lark2railroad import lark_parser, Lark2Railroad, Lark2HTML
+from lark2railroad import lark_parser, Lark2HTML, regex101
 
 tree = lark_parser.parse(open('lark.lark').read())
 
-out = Lark2HTML().transform(tree)
+out = Lark2HTML(file_name='lark.lark', regex_link_creator=regex101).transform(tree)
 
 print(out, file=open('lark.html', 'w'))

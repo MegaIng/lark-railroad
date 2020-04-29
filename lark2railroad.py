@@ -1,13 +1,58 @@
 from __future__ import annotations
 
+from ast import literal_eval
 from io import StringIO
 from textwrap import indent
+from typing import Tuple
+from urllib.parse import urlencode
 
 from lark import Lark, Transformer, Discard
 from railroad import NonTerminal, Terminal, Choice, OneOrMore, ZeroOrMore, Diagram, Optional, Sequence, Group, Comment, \
     Start, DEFAULT_STYLE
 
 lark_parser = Lark.open('lark.lark', rel_to=__file__, parser='lalr')
+
+
+def _eval_escaping(s):
+    w = ''
+    i = iter(s)
+    for n in i:
+        w += n
+        if n == '\\':
+            try:
+                n2 = next(i)
+            except StopIteration:
+                raise ValueError("Literal ended unexpectedly (bad escaping): `%r`" % s)
+            if n2 == '\\':
+                w += '\\\\'
+            elif n2 not in 'uxnftr':
+                w += '\\'
+            w += n2
+    w = w.replace('\\"', '"').replace("'", "\\'")
+
+    to_eval = "u'''%s'''" % w
+    try:
+        s = literal_eval(to_eval)
+    except SyntaxError as e:
+        raise ValueError(s, e)
+
+    return s
+
+
+def _unquote_literal(t, v) -> Tuple[str, str]:
+    flag_start = v.rfind('/"'[type == 'STRING']) + 1
+    assert flag_start > 0
+    flags = v[flag_start:]
+
+    v = v[:flag_start]
+    assert v[0] == v[-1] and v[0] in '"/', v
+    x = v[1:-1]
+
+    s = _eval_escaping(x)
+
+    if type == 'STRING':
+        s = s.replace('\\\\', '\\')
+    return s, flags
 
 
 class Lark2Railroad(Transformer):
@@ -70,7 +115,7 @@ class Lark2Railroad(Transformer):
 
     def rule(self, children):
         name, expansions = children
-        return name, Diagram(Start('complex', name.value), expansions, type='complex')
+        return name, Diagram(Start('complex', name.value), expansions, type='complex', css=self._css)
 
     def token(self, children):
         name, expansions = children
@@ -112,15 +157,21 @@ DIAGRAM_TEMPLATE = """
 
 
 class Lark2HTML(Lark2Railroad):
-    file_name: str = '&lt;string&gt;'
+    file_name = '&lt;string&gt;'
 
-    def __init__(self, css=DEFAULT_STYLE):
+    def __init__(self, css=DEFAULT_STYLE, file_name=None, regex_link_creator=lambda regex, flags: None):
         super(Lark2HTML, self).__init__(css=None)
         self._global_css = css
+        if file_name is not None:
+            self.file_name = file_name
+        self.regex_link_creator = regex_link_creator
 
     def _href_generator(self, node_type, value):
         if node_type in ('RULE', 'TOKEN'):
             return f'#{value}'
+        elif node_type == 'REGEXP':
+            regex, flags = _unquote_literal(node_type, value)
+            return self.regex_link_creator(regex, flags)
         else:
             return None
 
@@ -137,3 +188,16 @@ class Lark2HTML(Lark2Railroad):
             style=self._global_css,
             diagrams=diagrams
         )
+
+
+def regex101(regex, flags):
+    return f"https://regex101.com/?{urlencode({'regex': regex, 'flavor': 'python', 'flags': flags})}"
+
+
+def pythex(regex, flags):
+    return f"""https://pythex.org/?{urlencode({
+        'regex': regex,
+        'ignorecase': int('i' in flags),
+        'multiline': int('m' in flags),
+        'dotall': int('s' in flags),
+        'verbose': int('x' in flags)})}"""
