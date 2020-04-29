@@ -85,6 +85,10 @@ class Lark2Railroad(Transformer):
         value, = children
         return Terminal(value.value, href=self._href_generator(value.type, value.value))
 
+    def literal_range(self, children):
+        start, end = children
+        return Terminal(f'{start}..{end}', self._href_generator('literal_range', (start, end)))
+
     def expansion(self, children):
         return Sequence(*children)
 
@@ -100,10 +104,16 @@ class Lark2Railroad(Transformer):
 
     def expr(self, children):
         if len(children) == 3:
-            raise ValueError("Repetitions '(...)~a..b' are currently not supported")
+            base, mi, ma = children
+            if int(mi.value) == 0:
+                if int(ma.value) == 1:
+                    return Optional(base)
+                return ZeroOrMore(base, Comment(f'{mi.value}..{ma.value}'))
+            else:
+                return OneOrMore(base, Comment(f'{mi.value}..{ma.value}'))
         base, op = children
         if op.type != 'OP':
-            raise ValueError("Repetitions '(...)~a' are currently not supported")
+            return OneOrMore(base, Comment(f'{op.value} times'))
         if op.value == '+':
             return OneOrMore(base)
         elif op.value == '*':
